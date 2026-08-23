@@ -1,0 +1,6 @@
+{
+  "name": "RADISCAN AI",
+  "description": "Interactive, educational workspace for orthopedic students and medical minds to explore, analyze, and understand X-rays with AI overlays and expert clinical cases.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
