@@ -1,15 +1,60 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { MEDICAL_CASES } from '../data/cases';
+import { useStudyStore } from '../store/useStudyStore';
+import { useAuth } from '../context/AuthContext';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 export const Workspace = ({
   selectedCaseId,
   onSelectCase,
   onNavigate
 }) => {
-  const currentCase =
-    MEDICAL_CASES.find((c) => c.id === selectedCaseId) || MEDICAL_CASES[0];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const storageKey = `radiscan_custom_cases_${user?.id || 'guest'}`;
+  const [customCases] = useLocalStorage(storageKey, []);
 
-  // Viewer image adjustments
+  const queryCase = searchParams.get('case');
+  const activeId = queryCase || selectedCaseId || MEDICAL_CASES[0].id;
+  const foundCustom = customCases.find((c) => c.id === activeId);
+  const foundRepo = MEDICAL_CASES.find((c) => c.id === activeId);
+
+  const currentCase = foundCustom
+    ? {
+        ...foundCustom,
+        category: foundCustom.region || foundCustom.category || 'Custom Region',
+        modality: 'Radiograph (X-Ray)',
+        projection: 'Clinical Series',
+        patientAge: 'De-identified',
+        patientGender: 'Adult',
+        impression: foundCustom.findings || foundCustom.impression || 'User documented findings',
+        classification: { system: 'Custom Diagnostic Record', type: 'Clinical Trainee Case' },
+        anatomicalRegions: foundCustom.anatomicalRegions || [],
+        quizQuestions: foundCustom.quizQuestions || [],
+        teachingPoints: [
+          foundCustom.findings || 'Key findings recorded in custom case form.',
+          foundCustom.description || 'Clinical history and presentation recorded in custom case form.'
+        ],
+      }
+    : (foundRepo || MEDICAL_CASES[0]);
+
+  const handleSelectCaseItem = (caseId) => {
+    setCustomImage(null);
+    setCustomImageName('');
+    setSearchParams({ case: caseId });
+    if (onSelectCase) {
+      onSelectCase(caseId);
+    }
+  };
+
+  // =========================================================================
+  // LOCAL COMPONENT STATE (Architectural Rule: local state stays in components)
+  // - zoom, pan, contrast, brightness, invert: ephemeral viewer manipulation
+  // - activeTab: UI tab selection for inspector panel
+  // - overlay toggles & temporary annotations: viewer interactions
+  // =========================================================================
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -19,23 +64,69 @@ export const Workspace = ({
   const [brightness, setBrightness] = useState(100);
   const [invert, setInvert] = useState(false);
 
-  // Overlay toggles
+  // Overlay toggles (local state)
   const [showRoi, setShowRoi] = useState(true);
   const [showAnatomy, setShowAnatomy] = useState(true);
   const [showMeasurements, setShowMeasurements] = useState(true);
   const [annotationMode, setAnnotationMode] = useState(false);
 
-  // Custom User Annotations
+  // Custom User Annotations (local state)
   const [userAnnotations, setUserAnnotations] = useState([]);
   const [activeHoveredRegion, setActiveHoveredRegion] = useState(null);
   const [selectedRegionId, setSelectedRegionId] = useState(null);
 
-  // Inspector Tab
+  // Inspector Tab selection (local state)
   const [activeTab, setActiveTab] = useState('findings');
 
-  // Quiz state for this case
+  // Quiz state for this case (local state)
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizSubmitted, setQuizSubmitted] = useState({});
+
+  // =========================================================================
+  // CASE QUIZ TIMER (useEffect cleanup & useRef for interval id)
+  // =========================================================================
+  const caseQuizTimerRef = useRef(null);
+  const [caseQuizTimeLeft, setCaseQuizTimeLeft] = useState(60);
+
+  useEffect(() => {
+    if (activeTab !== 'quiz') {
+      if (caseQuizTimerRef.current) {
+        clearInterval(caseQuizTimerRef.current);
+        caseQuizTimerRef.current = null;
+      }
+      return;
+    }
+
+    caseQuizTimerRef.current = setInterval(() => {
+      setCaseQuizTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (caseQuizTimerRef.current) {
+            clearInterval(caseQuizTimerRef.current);
+            caseQuizTimerRef.current = null;
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Cleanup function: runs on unmount or tab change
+    return () => {
+      if (caseQuizTimerRef.current) {
+        clearInterval(caseQuizTimerRef.current);
+        caseQuizTimerRef.current = null;
+      }
+    };
+  }, [activeTab]);
+
+  // =========================================================================
+  // SHARED GLOBAL STATE (Architectural Rule: shared state goes in useStudyStore)
+  // - bookmarks: bookmarked cases across archive, my cases, and workspace
+  // - toggleBookmark: action to add/remove case bookmarks
+  // - addQuizResult: action to record completed quiz assessments
+  // =========================================================================
+  const { bookmarks, toggleBookmark, addQuizResult } = useStudyStore();
+  const isCaseBookmarked = bookmarks.includes(currentCase.id);
 
   // Custom uploaded case
   const [customImage, setCustomImage] = useState(null);
@@ -104,6 +195,32 @@ export const Workspace = ({
     setUserAnnotations(userAnnotations.filter((a) => a.id !== id));
   };
 
+  // Submit case-level quiz and persist result to shared store upon completion
+  const handleCaseQuizSubmit = (qId) => {
+    const updatedSubmitted = { ...quizSubmitted, [qId]: true };
+    setQuizSubmitted(updatedSubmitted);
+
+    const questions = currentCase.quizQuestions || [];
+    const allDone = questions.every((q) => updatedSubmitted[q.id]);
+    if (allDone) {
+      let correct = 0;
+      questions.forEach((q) => {
+        if (quizAnswers[q.id] === q.correctIndex) {
+          correct += 1;
+        }
+      });
+      addQuizResult({
+        id: `workspace-${currentCase.id}-${Date.now()}`,
+        score: correct,
+        totalQuestions: questions.length,
+        percentage: Math.round((correct / questions.length) * 100),
+        title: `Case Quiz // ${currentCase.title}`,
+        category: currentCase.category,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  };
+
   // Handle custom image upload
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -129,7 +246,12 @@ export const Workspace = ({
       <div className="bg-[#0F172A] border-b border-[#1E293B] px-6 py-2.5 flex items-center justify-between z-20 font-mono">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => onNavigate('landing')}
+            type="button"
+            id="btn-workspace-back-index"
+            onClick={() => {
+              if (onNavigate) onNavigate('landing');
+              navigate('/');
+            }}
             className="flex items-center gap-1.5 text-xs text-[#94A3B8] hover:text-[#60A5FA] px-2.5 py-1 bg-[#162035] hover:bg-[#1E293B] border border-[#25334D] transition-colors cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
@@ -146,23 +268,68 @@ export const Workspace = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Bookmark Button in Workspace Action Bar */}
+          {!customImage && (
+            <button
+              type="button"
+              id="btn-workspace-bookmark-toggle"
+              onClick={() => toggleBookmark(currentCase.id)}
+              className={`text-xs flex items-center gap-1.5 transition-all px-2.5 py-1 uppercase tracking-wider border cursor-pointer ${
+                isCaseBookmarked
+                  ? 'bg-[#60A5FA] text-[#090D16] border-[#60A5FA] font-bold shadow-sm'
+                  : 'bg-[#162035] text-[#94A3B8] border-[#25334D] hover:border-[#60A5FA] hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">
+                {isCaseBookmarked ? 'bookmark' : 'bookmark_border'}
+              </span>
+              <span>{isCaseBookmarked ? 'Bookmarked' : 'Bookmark Case'}</span>
+            </button>
+          )}
+
           <button
-            onClick={() => onNavigate('case-library')}
-            className="text-xs text-[#94A3B8] hover:text-[#60A5FA] flex items-center gap-1.5 transition-colors px-2 py-1 uppercase tracking-wider cursor-pointer"
+            type="button"
+            id="btn-workspace-archive"
+            onClick={() => {
+              if (onNavigate) onNavigate('case-library');
+              navigate('/case-library');
+            }}
+            className="text-xs text-[#94A3B8] hover:text-[#60A5FA] flex items-center gap-1.5 transition-colors px-2.5 py-1 bg-[#162035] border border-[#25334D] hover:border-[#60A5FA] uppercase tracking-wider cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">grid_view</span>
             Archive
           </button>
+
           <button
-            onClick={() => onNavigate('quizzes')}
-            className="text-xs text-[#94A3B8] hover:text-[#60A5FA] flex items-center gap-1.5 transition-colors px-2 py-1 uppercase tracking-wider cursor-pointer"
+            type="button"
+            id="btn-workspace-quizzes"
+            onClick={() => {
+              if (onNavigate) onNavigate('quizzes');
+              navigate('/quizzes');
+            }}
+            className="text-xs text-[#94A3B8] hover:text-[#60A5FA] flex items-center gap-1.5 transition-colors px-2.5 py-1 bg-[#162035] border border-[#25334D] hover:border-[#60A5FA] uppercase tracking-wider cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">school</span>
             Quiz Lab
           </button>
+
+          <button
+            type="button"
+            id="btn-workspace-flashcards"
+            onClick={() => {
+              if (onNavigate) onNavigate('flashcards');
+              navigate('/flashcards');
+            }}
+            className="text-xs text-[#94A3B8] hover:text-[#60A5FA] flex items-center gap-1.5 transition-colors px-2.5 py-1 bg-[#162035] border border-[#25334D] hover:border-[#60A5FA] uppercase tracking-wider cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-sm">style</span>
+            Flashcards
+          </button>
+
           {customImage && (
             <button
+              type="button"
               onClick={() => {
                 setCustomImage(null);
                 setCustomImageName('');
@@ -198,11 +365,9 @@ export const Workspace = ({
               return (
                 <button
                   key={item.id}
+                  type="button"
                   id={`case-card-${item.id}`}
-                  onClick={() => {
-                    setCustomImage(null);
-                    onSelectCase(item.id);
-                  }}
+                  onClick={() => handleSelectCaseItem(item.id)}
                   className={`w-full text-left p-3 border transition-all duration-150 cursor-pointer ${
                     isSelected
                       ? 'bg-[#162035] border-[#60A5FA] text-white shadow-lg'
@@ -819,9 +984,15 @@ export const Workspace = ({
                 <span className="text-[11px] text-[#60A5FA] uppercase tracking-wider font-bold">
                   Diagnostic Quiz
                 </span>
-                <span className="text-[10px] bg-[#162035] border border-[#25334D] px-2 py-0.5 text-white">
-                  {currentCase.quizQuestions.length} Questions
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-[#162035] border border-[#25334D] px-2 py-0.5 text-white">
+                    {currentCase.quizQuestions.length} Questions
+                  </span>
+                  <span className="text-[10px] bg-amber-950/40 border border-amber-500/50 px-2 py-0.5 text-amber-300 font-mono flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">timer</span>
+                    00:{String(caseQuizTimeLeft).padStart(2, '0')}
+                  </span>
+                </div>
               </div>
 
               {currentCase.quizQuestions.map((q, qIndex) => {
@@ -874,9 +1045,7 @@ export const Workspace = ({
                     {!isSubmitted ? (
                       <button
                         disabled={selectedOption === undefined}
-                        onClick={() =>
-                          setQuizSubmitted({ ...quizSubmitted, [q.id]: true })
-                        }
+                        onClick={() => handleCaseQuizSubmit(q.id)}
                         className="w-full mt-1 bg-[#60A5FA] disabled:opacity-30 text-[#090D16] py-1.5 font-bold uppercase text-[10px] tracking-wider cursor-pointer hover:bg-white transition-colors"
                       >
                         Submit Answer

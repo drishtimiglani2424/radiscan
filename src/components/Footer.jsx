@@ -60,6 +60,15 @@ export const Footer = ({ onNavigate, onOpenInfo }) => {
                 </button>
               </li>
               <li>
+                <button
+                  id="footer-link-login"
+                  onClick={() => onNavigate('login')}
+                  className="hover:text-[#60A5FA] transition-colors cursor-pointer uppercase font-bold text-[#60A5FA]"
+                >
+                  Clinician Portal / Login
+                </button>
+              </li>
+              <li>
                 <a
                   href="#pricing"
                   onClick={(e) =>

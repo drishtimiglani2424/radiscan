@@ -1,17 +1,41 @@
 import React, { useState } from 'react';
 import radiusImg from '../assets/images/radius_fracture_xray_1787513329522.jpg';
+import { HomeLoginCard } from './HomeLoginCard';
+import { useAuth } from '../context/AuthContext';
+import { Input } from './Input';
+import { validateEmail } from '../utils/validators';
 
 export const LandingPage = ({ onNavigate, onSelectCase }) => {
-  const [email, setEmail] = useState('');
+  const { isAuthenticated } = useAuth();
+  const [newsletterValues, setNewsletterValues] = useState({ email: '' });
+  const [newsletterErrors, setNewsletterErrors] = useState({});
+  const [newsletterTouched, setNewsletterTouched] = useState({});
   const [subscribed, setSubscribed] = useState(false);
   const [interactiveBoxHovered, setInteractiveBoxHovered] = useState(false);
 
+  const handleNewsletterChange = (e) => {
+    const { name, value } = e.target;
+    setNewsletterValues((prev) => ({ ...prev, [name]: value }));
+    if (newsletterTouched[name]) {
+      setNewsletterErrors((prev) => ({ ...prev, [name]: validateEmail(value) }));
+    }
+  };
+
+  const handleNewsletterBlur = (e) => {
+    const { name, value } = e.target;
+    setNewsletterTouched((prev) => ({ ...prev, [name]: true }));
+    setNewsletterErrors((prev) => ({ ...prev, [name]: validateEmail(value) }));
+  };
+
   const handleSubscribe = (e) => {
     e.preventDefault();
-    if (email.trim()) {
-      setSubscribed(true);
-      setEmail('');
-    }
+    setNewsletterTouched({ email: true });
+    const err = validateEmail(newsletterValues.email);
+    setNewsletterErrors({ email: err });
+    if (err) return; // Block submit if error exists
+
+    setSubscribed(true);
+    setNewsletterValues({ email: '' });
   };
 
   const featuredImageUrl = radiusImg;
@@ -68,6 +92,20 @@ export const LandingPage = ({ onNavigate, onSelectCase }) => {
                 </span>
               </button>
 
+              {/* Circular Login / Profile Button */}
+              <button
+                id="btn-hero-login"
+                onClick={() => onNavigate('login')}
+                className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border border-[#1E293B] hover:border-[#60A5FA] flex flex-col items-center justify-center text-center cursor-pointer bg-[#0F172A] hover:bg-[#162035] text-white hover:text-[#60A5FA] transition-all group active:scale-95 shadow-lg"
+              >
+                <span className="material-symbols-outlined text-lg mb-1 group-hover:scale-110 transition-transform">
+                  {isAuthenticated ? 'account_circle' : 'lock_open'}
+                </span>
+                <span className="text-[10px] sm:text-xs font-mono uppercase tracking-[2px] font-bold">
+                  {isAuthenticated ? 'Profile' : 'Sign In'}
+                </span>
+              </button>
+
               <div className="flex flex-col gap-2 font-mono text-xs text-[#64748B]">
                 <div className="flex items-center gap-2">
                   <span className="text-[#60A5FA] font-bold">●</span>
@@ -79,7 +117,7 @@ export const LandingPage = ({ onNavigate, onSelectCase }) => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[#60A5FA] font-bold">●</span>
-                  <span>Board-Style Quiz Engine</span>
+                  <span>Local Storage Auth Engine</span>
                 </div>
               </div>
             </div>
@@ -157,6 +195,61 @@ export const LandingPage = ({ onNavigate, onSelectCase }) => {
               DIAGNOSTIC FLOW: STABLE<br />
               MEASUREMENT CALIPERS: READY
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Clinician Access & Local Storage Authentication Portal (Syllabus: HTML5, Browser Storage, Controlled Components) */}
+      <section id="section-clinician-portal" className="max-w-7xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-[#090D16] border border-[#1E293B] p-6 sm:p-10 relative overflow-hidden">
+          {/* Subtle background glow */}
+          <div className="absolute -top-24 -left-24 w-72 h-72 bg-[#60A5FA]/5 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div className="lg:col-span-5 space-y-4 relative z-10">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 bg-[#60A5FA]"></span>
+              <span className="font-mono text-xs uppercase tracking-[3px] text-[#60A5FA]">
+                LOCAL BROWSER AUTHENTICATION
+              </span>
+            </div>
+
+            <h2 className="text-3xl sm:text-4xl font-bold uppercase tracking-tight text-white font-syne">
+              Clinician & Student Access
+            </h2>
+
+            <p className="text-sm text-[#94A3B8] leading-relaxed">
+              Authenticate directly from the home page. Credentials and diagnostic bookmarks are stored locally in your browser's <code className="text-[#60A5FA] bg-[#162035] px-1.5 py-0.5 text-xs font-mono">localStorage</code> using JSON serialization.
+            </p>
+
+            <div className="space-y-3 pt-2 text-xs font-mono text-[#94A3B8]">
+              <div className="flex items-start gap-2.5">
+                <span className="material-symbols-outlined text-sm text-[#60A5FA] mt-0.5">verified_user</span>
+                <div>
+                  <strong className="text-white">Strict Local Privacy:</strong> Zero external dependencies or cloud tokens. All accounts persist purely on this browser.
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="material-symbols-outlined text-sm text-[#60A5FA] mt-0.5">dataset</span>
+                <div>
+                  <strong className="text-white">Pre-Loaded Demo Accounts:</strong> Instant 1-click login for attending surgeons and orthopedic residents.
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                id="btn-goto-full-login-page"
+                onClick={() => onNavigate('login')}
+                className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-[2px] text-[#60A5FA] hover:text-white transition-colors cursor-pointer"
+              >
+                <span>Go to dedicated full-page authentication</span>
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="lg:col-span-7 relative z-10">
+            <HomeLoginCard onNavigate={onNavigate} />
           </div>
         </div>
       </section>
@@ -460,23 +553,29 @@ export const LandingPage = ({ onNavigate, onSelectCase }) => {
               SUBSCRIPTION RECORDED // RADISCAN DISPATCH ACTIVE
             </div>
           ) : (
-            <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-              <input
-                id="input-newsletter-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="clinician@institution.edu"
-                className="flex-1 bg-[#0B1120] border border-[#25334D] px-4 py-3 text-xs font-mono text-white placeholder-[#64748B] focus:outline-none focus:border-[#60A5FA] transition-colors"
-              />
-              <button
-                id="btn-newsletter-submit"
-                type="submit"
-                className="bg-[#60A5FA] text-[#090D16] hover:bg-white transition-colors px-6 py-3 text-xs font-mono font-bold uppercase tracking-[2px] cursor-pointer shrink-0"
-              >
-                Subscribe
-              </button>
+            <form onSubmit={handleSubscribe} noValidate className="max-w-md mx-auto space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <div className="flex-1 w-full text-left">
+                  <Input
+                    id="input-newsletter-email"
+                    name="email"
+                    type="email"
+                    value={newsletterValues.email}
+                    onChange={handleNewsletterChange}
+                    onBlur={handleNewsletterBlur}
+                    error={newsletterTouched.email ? newsletterErrors.email : ''}
+                    placeholder="clinician@institution.edu"
+                    required
+                  />
+                </div>
+                <button
+                  id="btn-newsletter-submit"
+                  type="submit"
+                  className="bg-[#60A5FA] text-[#090D16] hover:bg-white transition-colors px-6 py-2.5 text-xs font-mono font-bold uppercase tracking-[2px] cursor-pointer shrink-0 w-full sm:w-auto"
+                >
+                  Subscribe
+                </button>
+              </div>
             </form>
           )}
         </div>
