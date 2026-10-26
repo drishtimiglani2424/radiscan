@@ -29,8 +29,18 @@ export const Workspace = ({
         projection: 'Clinical Series',
         patientAge: 'De-identified',
         patientGender: 'Adult',
+        clinicalHistory: foundCustom.description || 'Clinical history and presentation recorded in custom case form.',
         impression: foundCustom.findings || foundCustom.impression || 'User documented findings',
-        classification: { system: 'Custom Diagnostic Record', type: 'Clinical Trainee Case' },
+        findings: Array.isArray(foundCustom.findings)
+          ? foundCustom.findings
+          : [foundCustom.findings].filter(Boolean),
+        classification: {
+          system: 'Custom Diagnostic Record',
+          type: 'Clinical Trainee Case',
+          description: foundCustom.description || 'Documented by user in custom case form.'
+        },
+        measurements: foundCustom.measurements || [],
+        primaryRoi: foundCustom.primaryRoi || null,
         anatomicalRegions: foundCustom.anatomicalRegions || [],
         quizQuestions: foundCustom.quizQuestions || [],
         teachingPoints: [
@@ -671,7 +681,7 @@ export const Workspace = ({
                 )}
 
                 {/* Simulated ROI Bounding Box Overlay in Light Navy Blue */}
-                {showRoi && !customImage && (
+                {showRoi && !customImage && currentCase.primaryRoi && (
                   <div
                     style={{
                       left: `${currentCase.primaryRoi.xPercent}%`,
@@ -875,35 +885,41 @@ export const Workspace = ({
                   <span className="material-symbols-outlined text-sm">tune</span>
                   Orthopedic Calipers
                 </div>
-                <div className="space-y-2">
-                  {currentCase.measurements.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 bg-[#0F172A] border border-[#1E293B]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-white text-[11px]">
-                          {m.name}
-                        </span>
-                        <span
-                          className={`text-[9px] px-1.5 py-0.2 uppercase font-bold border ${
-                            m.status === 'abnormal'
-                              ? 'bg-rose-950 text-rose-300 border-rose-500/40'
-                              : 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
-                          }`}
-                        >
-                          {m.measuredValue}
-                        </span>
+                {currentCase.measurements && currentCase.measurements.length > 0 ? (
+                  <div className="space-y-2">
+                    {currentCase.measurements.map((m, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2.5 bg-[#0F172A] border border-[#1E293B]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-white text-[11px]">
+                            {m.name}
+                          </span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 uppercase font-bold border ${
+                              m.status === 'abnormal'
+                                ? 'bg-rose-950 text-rose-300 border-rose-500/40'
+                                : 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
+                            }`}
+                          >
+                            {m.measuredValue}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-[#64748B] mt-0.5">
+                          Normal: {m.normalRange}
+                        </div>
+                        <div className="text-[11px] text-[#94A3B8] font-sans mt-1 leading-snug">
+                          {m.interpretation}
+                        </div>
                       </div>
-                      <div className="text-[10px] text-[#64748B] mt-0.5">
-                        Normal: {m.normalRange}
-                      </div>
-                      <div className="text-[11px] text-[#94A3B8] font-sans mt-1 leading-snug">
-                        {m.interpretation}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-[#0F172A] border border-[#1E293B] text-[11px] text-[#64748B] font-mono">
+                    No caliper measurements documented for this case.
+                  </div>
+                )}
               </div>
 
               {/* Detailed Findings List */}
@@ -913,7 +929,10 @@ export const Workspace = ({
                   Radiographic Findings
                 </div>
                 <ul className="space-y-2 font-sans">
-                  {currentCase.findings.map((finding, idx) => (
+                  {(Array.isArray(currentCase.findings)
+                    ? currentCase.findings
+                    : [currentCase.findings].filter(Boolean)
+                  ).map((finding, idx) => (
                     <li
                       key={idx}
                       className="flex items-start gap-2 text-[#94A3B8] text-[11px] leading-relaxed"
@@ -935,44 +954,50 @@ export const Workspace = ({
               </div>
 
               <div className="space-y-2">
-                {currentCase.anatomicalRegions.map((region) => {
-                  const isSelected = selectedRegionId === region.id;
-                  return (
-                    <div
-                      key={region.id}
-                      onClick={() => {
-                        setSelectedRegionId(region.id);
-                        setActiveHoveredRegion(region.id);
-                      }}
-                      className={`p-3 border transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#162035] border-[#60A5FA]'
-                          : 'bg-[#0F172A] border-[#1E293B] hover:border-[#25334D]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <div className={`font-bold text-xs ${isSelected ? 'text-[#60A5FA]' : 'text-white'}`}>
-                          {region.name}
+                {currentCase.anatomicalRegions && currentCase.anatomicalRegions.length > 0 ? (
+                  currentCase.anatomicalRegions.map((region) => {
+                    const isSelected = selectedRegionId === region.id;
+                    return (
+                      <div
+                        key={region.id}
+                        onClick={() => {
+                          setSelectedRegionId(region.id);
+                          setActiveHoveredRegion(region.id);
+                        }}
+                        className={`p-3 border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#162035] border-[#60A5FA]'
+                            : 'bg-[#0F172A] border-[#1E293B] hover:border-[#25334D]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className={`font-bold text-xs ${isSelected ? 'text-[#60A5FA]' : 'text-white'}`}>
+                            {region.name}
+                          </div>
+                          <span className="w-5 h-5 bg-[#162035] text-[#60A5FA] flex items-center justify-center text-[10px] font-bold border border-[#25334D]">
+                            {region.name.charAt(0)}
+                          </span>
                         </div>
-                        <span className="w-5 h-5 bg-[#162035] text-[#60A5FA] flex items-center justify-center text-[10px] font-bold border border-[#25334D]">
-                          {region.name.charAt(0)}
-                        </span>
-                      </div>
-                      {region.latinName && (
-                        <div className="text-[10px] italic text-[#64748B] font-sans mb-1">
-                          {region.latinName}
+                        {region.latinName && (
+                          <div className="text-[10px] italic text-[#64748B] font-sans mb-1">
+                            {region.latinName}
+                          </div>
+                        )}
+                        <p className="text-[11px] text-[#94A3B8] font-sans mb-1.5 leading-snug">
+                          {region.description}
+                        </p>
+                        <div className="text-[10px] text-[#E2E8F0] bg-[#090D16] p-2 border border-[#1E293B] leading-snug">
+                          <strong className="block text-[#60A5FA] mb-0.5 uppercase">Clinical Note:</strong>
+                          <span className="font-sans text-[11px]">{region.clinicalSignificance}</span>
                         </div>
-                      )}
-                      <p className="text-[11px] text-[#94A3B8] font-sans mb-1.5 leading-snug">
-                        {region.description}
-                      </p>
-                      <div className="text-[10px] text-[#E2E8F0] bg-[#090D16] p-2 border border-[#1E293B] leading-snug">
-                        <strong className="block text-[#60A5FA] mb-0.5 uppercase">Clinical Note:</strong>
-                        <span className="font-sans text-[11px]">{region.clinicalSignificance}</span>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  <div className="p-3 bg-[#0F172A] border border-[#1E293B] text-[11px] text-[#64748B] font-mono">
+                    No anatomical landmark markers defined for this case.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -986,7 +1011,7 @@ export const Workspace = ({
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] bg-[#162035] border border-[#25334D] px-2 py-0.5 text-white">
-                    {currentCase.quizQuestions.length} Questions
+                    {(currentCase.quizQuestions || []).length} Questions
                   </span>
                   <span className="text-[10px] bg-amber-950/40 border border-amber-500/50 px-2 py-0.5 text-amber-300 font-mono flex items-center gap-1">
                     <span className="material-symbols-outlined text-xs">timer</span>
@@ -995,7 +1020,12 @@ export const Workspace = ({
                 </div>
               </div>
 
-              {currentCase.quizQuestions.map((q, qIndex) => {
+              {(!currentCase.quizQuestions || currentCase.quizQuestions.length === 0) ? (
+                <div className="p-4 bg-[#0F172A] border border-[#1E293B] text-[11px] text-[#94A3B8] font-mono leading-relaxed">
+                  No quiz questions configured for this custom case. Practice with verified diagnostic cases in the Quiz Center.
+                </div>
+              ) : (
+                currentCase.quizQuestions.map((q, qIndex) => {
                 const selectedOption = quizAnswers[q.id];
                 const isSubmitted = quizSubmitted[q.id];
                 const isCorrect = selectedOption === q.correctIndex;
@@ -1069,7 +1099,7 @@ export const Workspace = ({
                     )}
                   </div>
                 );
-              })}
+              }))}
             </div>
           )}
 
